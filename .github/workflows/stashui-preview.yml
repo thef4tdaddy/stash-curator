@@ -1,0 +1,62 @@
+name: StashUI preview package
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/stashui-preview.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stashui-preview
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          version: "0.11.21"
+          python-version: "3.12"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: core/go.sum
+      - name: Verify StashUI extension
+        run: |
+          uv sync --locked
+          uv run pytest -q tests/plugin/test_stashui_extension.py tests/plugin/test_stashui_installer.py tests/test_build_plugin.py
+      - name: Build complete plugin package
+        run: uv run python scripts/build_plugin.py --dev
+      - name: Verify archives and prepare source URLs
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import hashlib, os, pathlib, zipfile
+          root = pathlib.Path('dist/dev')
+          base = 'https://github.com/' + os.environ['REPOSITORY'] + '/releases/download/stashui-preview/'
+          for index in root.glob('index*.yml'):
+              text = index.read_text()
+              archive = next(line.split(': ', 1)[1] for line in text.splitlines() if line.startswith('  path: '))
+              digest = next(line.split(': ', 1)[1] for line in text.splitlines() if line.startswith('  sha256: '))
+              assert hashlib.sha256((root / archive).read_bytes()).hexdigest() == digest
+              with zipfile.ZipFile(root / archive) as package:
+                  assert package.testzip() is None
+                  assert 'assets/stashui.js' in package.namelist()
+                  assert 'stash-curator.yml' in package.namelist()
+              index.write_text(text.replace('  path: ' + archive, '  path: ' + base + archive))
+          PY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stashui-preview-package
+          path: |
+            dist/dev/stash-curator*.zip
+            dist/dev/index*.yml
