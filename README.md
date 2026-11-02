@@ -45,6 +45,24 @@ Curator your preferences. Feedback affects rankings after a model update.
 
 ### Stash UI integration
 
+**Install this adapter into an existing Curator installation:** download
+[`scripts/install_stashui.py`](https://raw.githubusercontent.com/thef4tdaddy/stash-curator/main/scripts/install_stashui.py)
+and run it with Python, passing the installed Curator folder:
+
+```bash
+python3 install_stashui.py "/path/to/stash/plugins/stash-curator"
+```
+
+The folder must contain `stash-curator.yml`. For Docker, run inside the container
+or pass the host path to the mounted plugin folder. With no path argument the
+installer looks under the usual `/root/.stash/plugins`, `/config/plugins`, and
+your home directory's `.stash/plugins` folders, and proceeds only for one match.
+It verifies the adapter's checksum, backs up affected files, and preserves the
+installed Curator version, backend, database and settings. Reload plugins, refresh
+Stash UI, and open **Extensions → Stash Curator**. This is an adapter installer,
+not a Stash plugin-manager source; upstream plugin updates may overwrite it, so
+rerun it after those updates. No Go compiler is needed.
+
 This fork includes an optional [Stash UI API v2](https://github.com/anonym88312/stash-pmv-plugins/tree/main/plugins/stashui#for-plugin-authors-extension-modules-api-v2)
 adapter. With Stash UI enabled, **Extensions → Stash Curator** opens a dedicated
 extension page containing Curator's complete interface. The scene player's info panel gets
