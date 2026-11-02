@@ -43,6 +43,34 @@ Curator your preferences. Feedback affects rankings after a model update.
 
 ## Explore Curator
 
+### Stash UI integration
+
+This fork includes an optional [Stash UI API v2](https://github.com/anonym88312/stash-pmv-plugins/tree/main/plugins/stashui#for-plugin-authors-extension-modules-api-v2)
+adapter. With Stash UI enabled, **Extensions → Stash Curator** opens a dedicated
+extension page containing Curator's complete interface. The scene player's info panel gets
+**Find similar with Curator**; performer pages get that button and **Performer Hunt**.
+The selected scene or performer is passed to the existing Curator view.
+
+Recommendations, Find, Curate, Insights, Manage, settings, feedback, Whisparr
+actions and playback all use the existing Curator app inside the extension window.
+Local scene, performer, tag and settings links stay in that window, including links
+that normally open a new tab. **Curator home** returns from a local detail page;
+**Reload Curator** retries the initial view. External Stash-box links and downloads
+keep their normal behavior. The player supports fullscreen and picture-in-picture.
+
+The extension hosts the existing React app in a same-origin iframe, with classic
+Stash's navbar hidden by Stash UI. Users do not need to open or switch to classic
+Stash. This is an embedded integration, not a rewrite of Curator's React interface.
+It does not add Curator homepage lanes or playback tracking to Stash UI's separate
+home/player pages. Classic Stash continues to work as before; Stash UI is optional
+and is not a required plugin dependency.
+
+After updating the plugin, reload plugins and refresh Stash UI. Its Plugins page
+should show a **Stash UI extension** block for Curator with one route, one menu entry and two
+slots. Stash UI caches module discovery per plugin version; if testing an adapter
+added to an already-installed version, clear only its module-discovery cache in
+the browser console (`localStorage.removeItem("stashui.extMods1")`), then reload.
+
 ### Recommendations
 
 Browse seven lanes of scenes from your library: For You, Best Bets, New Arrivals,

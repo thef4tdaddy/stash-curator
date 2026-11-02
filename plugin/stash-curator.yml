@@ -17,6 +17,8 @@ ui:
     - stash-curator.js
   css:
     - stash-curator.css
+  assets:
+    /: assets
 
 settings:
   detailPageControls:
