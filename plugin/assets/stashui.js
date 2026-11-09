@@ -14,14 +14,14 @@ function curatorPath(params = {}) {
 }
 
 // Curator's entire React app runs in a same-origin frame, keeping its router,
-// native cards, player and tracking together. The extension owns the window:
-// no Classic Stash workshop header, separate tab, or second navigation shell.
+// native cards, player and tracking together inside Stash UI's full-page overlay.
 function renderCurator(el, { query = {}, signal } = {}) {
   if (signal?.aborted) return;
   const shell = document.createElement("section");
-  shell.style.cssText = "display:flex;flex-direction:column;gap:.5rem;min-width:0";
+  shell.style.cssText = "display:flex;flex-direction:column;width:100%;height:100dvh;min-width:0";
   const tools = document.createElement("div");
-  tools.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:.5rem";
+  // Leave room for Stash UI's own overlay close button at the top right.
+  tools.style.cssText = "display:flex;flex:none;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.75rem 4rem .5rem .75rem";
   const home = document.createElement("button");
   home.type = "button";
   home.className = "kb-btn";
@@ -37,7 +37,7 @@ function renderCurator(el, { query = {}, signal } = {}) {
   frame.title = "Stash Curator";
   frame.allow = "autoplay; fullscreen; picture-in-picture";
   frame.allowFullscreen = true;
-  frame.style.cssText = "width:100%;min-width:0;min-height:300px;border:0;border-radius:.5rem;background:var(--bg);flex:1";
+  frame.style.cssText = "display:block;width:100%;min-width:0;min-height:0;border:0;background:var(--base);flex:1 1 0";
   tools.appendChild(home);
   tools.appendChild(retry);
   tools.appendChild(status);
@@ -60,8 +60,8 @@ function renderCurator(el, { query = {}, signal } = {}) {
   const resize = () => {
     const viewport = window.visualViewport;
     const height = viewport?.height || window.innerHeight;
-    const top = frame.getBoundingClientRect().top - (viewport?.offsetTop || 0);
-    frame.style.height = `${Math.max(300, height - Math.max(0, top) - 16)}px`;
+    const top = shell.getBoundingClientRect().top - (viewport?.offsetTop || 0);
+    shell.style.height = `${Math.max(0, height - Math.max(0, top))}px`;
   };
   const onLoad = () => {
     if (disposed) return;
@@ -236,7 +236,7 @@ function homeRecommendations(stashui) {
 
 export default function setup(stashui) {
   if (!stashui || typeof stashui.has !== "function" || !stashui.has("route")) return;
-  stashui.addRoute({ path: "", title: "Stash Curator", render: renderCurator });
+  stashui.addRoute({ path: "", title: "Stash Curator", overlay: true, render: renderCurator });
   // Registering our own navigation suppresses Stash UI's automatic Curator
   // entry. All entry points use our extension page, never the classic workshop.
   if (stashui.has("navItem")) {

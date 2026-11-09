@@ -62,6 +62,7 @@ function destination(link) {
   assert.equal(destination(api.nav[0]).size, 0);
   assert.equal(api.routes.length, 1);
   assert.equal(api.routes[0].path, "");
+  assert.equal(api.routes[0].overlay, true);
   assert.deepEqual(api.slots.map((slot) => slot.name), ["scene.info", "performer.header"]);
   const scene = api.slots[0];
   const performer = api.slots[1];
@@ -191,7 +192,8 @@ function destination(link) {
   assert.equal(frame.tag, "iframe");
   assert.equal(frame.allowFullscreen, true);
   assert.match(frame.allow, /picture-in-picture/);
-  assert.equal(frame.style.height, "704px");
+  assert.equal(shell.style.height, "720px");
+  assert.match(frame.style.cssText, /min-height:0;.*flex:1 1 0/);
   const boot = new URL(frame.src, "https://example.test");
   assert.equal(boot.pathname, "/");
   const entry = new URL(boot.searchParams.get("kbroute"), boot.origin);
@@ -235,7 +237,7 @@ function destination(link) {
   assert.equal(new URL(frame.src, boot.origin).searchParams.get("kbroute"), "/plugins/stash-curator");
   window.visualViewport.height = 620;
   window.visualViewport.listeners.get("resize")();
-  assert.equal(frame.style.height, "424px");
+  assert.equal(shell.style.height, "440px");
   controller2.abort();
   dispose();
   assert.equal(container.children.length, 0);

@@ -73,8 +73,9 @@ To try the adapter from this checkout with an existing Curator installation, run
 `python3 scripts/install_stashui.py --adapter-file plugin/assets/stashui.js "/path/to/stash/plugins/stash-curator"`.
 
 This fork includes an optional [Stash UI API v2](https://github.com/anonym88312/stash-pmv-plugins/tree/main/plugins/stashui#for-plugin-authors-extension-modules-api-v2)
-adapter. With Stash UI enabled, **Extensions → Stash Curator** opens a dedicated
-extension page containing Curator's complete interface. The scene player's info panel gets
+adapter. With Stash UI enabled, **Extensions → Stash Curator** opens Curator's
+complete interface in a full-page overlay. Use the close button to return to
+Stash UI. The scene player's info panel gets
 **Find similar with Curator**; performer pages get that button and **Performer Hunt**.
 The selected scene or performer is passed to the existing Curator view.
 
