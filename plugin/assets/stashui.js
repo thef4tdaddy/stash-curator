@@ -49,8 +49,8 @@ function renderCurator(el, { query = {}, signal } = {}) {
   let detachDocument = () => {};
   let currentPath = curatorPath(query);
   // Boot through Stash's index so plugin routes are registered before routing.
-  // Stash UI's classic script recognises the embedded window, suppresses its
-  // navbar and does not redirect the index back into Stash UI.
+  // Stash UI's classic script recognises the embedded window and does not
+  // redirect the index back into Stash UI.
   const load = (path) => {
     if (disposed) return;
     currentPath = path;
@@ -70,6 +70,15 @@ function renderCurator(el, { query = {}, signal } = {}) {
     try {
       const doc = frame.contentDocument;
       if (!doc) throw new Error("Frame unavailable");
+      // Stash UI hides the Classic logo in embeds but keeps its fixed menu.
+      // Hide it in Curator's own frame, including when its router mounts it later.
+      const embeddedStyle = doc.createElement("style");
+      embeddedStyle.textContent = `
+        nav.top-nav { display: none !important; }
+        body { padding-top: 0 !important; }
+        .main { margin-top: 0 !important; }
+      `;
+      doc.head.appendChild(embeddedStyle);
       // A few Curator reports use target=_blank for local entities. Ordinary
       // clicks must keep these, local settings and playback in this window.
       // External Stash-box links and downloads keep their original behavior.
@@ -81,7 +90,10 @@ function renderCurator(el, { query = {}, signal } = {}) {
         if (url.origin === window.location.origin) anchor.setAttribute("target", "_self");
       };
       doc.addEventListener("click", keepLocal, true);
-      detachDocument = () => doc.removeEventListener("click", keepLocal, true);
+      detachDocument = () => {
+        doc.removeEventListener("click", keepLocal, true);
+        embeddedStyle.remove();
+      };
       status.textContent = "";
     } catch (_) {
       status.textContent = "Curator could not be loaded here. Try Reload Curator.";

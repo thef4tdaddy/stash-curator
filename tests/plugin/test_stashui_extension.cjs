@@ -200,11 +200,16 @@ function destination(link) {
   assert.equal(entry.pathname, "/plugins/stash-curator");
   assert.equal(entry.searchParams.get("label"), label);
   const initialSrc = frame.src;
-  const frameDoc = element("document");
+  const frameDoc = Object.assign(element("document"), {
+    createElement: element, head: element("head"),
+  });
   frame.contentDocument = frameDoc;
   frame.contentWindow = { location: { href: "https://example.test/plugins/stash-curator" } };
   frame.listeners.get("load")();
   assert.equal(status.textContent, "");
+  const [embeddedStyle] = frameDoc.head.children;
+  assert.match(embeddedStyle.textContent, /nav\.top-nav\s*\{\s*display:\s*none\s*!important/);
+  assert.match(embeddedStyle.textContent, /body\s*\{\s*padding-top:\s*0/);
   const keepLocal = frameDoc.listeners.get("click");
   const anchor = Object.assign(element("a"), { href: "https://example.test/scenes/42" });
   anchor.setAttribute("target", "_blank");
@@ -233,6 +238,8 @@ function destination(link) {
   assert.equal(frame.src, initialSrc);
   frame.listeners.get("load")();
   assert.notEqual(frameDoc.listeners.get("click"), keepLocal);
+  assert.equal(frameDoc.head.children.length, 1);
+  assert.notEqual(frameDoc.head.children[0], embeddedStyle);
   home.listeners.get("click")();
   assert.equal(new URL(frame.src, boot.origin).searchParams.get("kbroute"), "/plugins/stash-curator");
   window.visualViewport.height = 620;
@@ -242,6 +249,7 @@ function destination(link) {
   dispose();
   assert.equal(container.children.length, 0);
   assert.equal(frameDoc.listeners.size, 0);
+  assert.equal(frameDoc.head.children.length, 0);
   assert.equal(frame.listeners.size, 0);
   assert.equal(window.listeners.size, 0);
   assert.equal(window.visualViewport.listeners.size, 0);
