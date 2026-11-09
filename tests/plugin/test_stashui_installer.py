@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -19,9 +21,22 @@ def test_installer_preserves_version_settings_and_database(tmp_path: Path):
     database = plugin / "data" / "curator.sqlite3"
     database.parent.mkdir()
     database.write_bytes(b"unchanged test database")
-    adapter = (Path(__file__).parents[2] / "plugin" / "assets" / "stashui.js").read_bytes()
-    backup = install(plugin, adapter)
-    assert backup is not None
+    root = Path(__file__).parents[2]
+    adapter_file = root / "plugin" / "assets" / "stashui.js"
+    adapter = adapter_file.read_bytes()
+    subprocess.run(
+        [
+            sys.executable,
+            str(root / "scripts/install_stashui.py"),
+            "--adapter-file",
+            str(adapter_file),
+            str(plugin),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    (backup,) = (tmp_path / "curator-stashui-backups").iterdir()
     assert (backup / (manifest.name + ".bak")).read_text() == original
     assert not list(backup.rglob("*.yml"))
     assert "version: 0.52.0" in manifest.read_text()
@@ -30,7 +45,7 @@ def test_installer_preserves_version_settings_and_database(tmp_path: Path):
     assert frontend.read_text() == "existing frontend"
     assert database.read_bytes() == b"unchanged test database"
     assert (plugin / "assets" / "stashui.js").read_bytes() == adapter
-    assert install(plugin, adapter) is None
+    assert install(plugin, adapter, expected_sha256=None) is None
 
 
 def test_installer_refuses_bad_download_before_writes(tmp_path: Path):

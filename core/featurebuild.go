@@ -297,6 +297,9 @@ var tagRules = []struct{ match, pattern, role string }{
 	{"prefix", "[Workflow:", "workflow_administrative"},
 	{"prefix", "[Technical:", "quality_technical"},
 	{"exact", "[Curator: Ignore]", "ignored"},
+	{"exact", "Advanced Rating System", "ignored"},
+	{"exact", "Advanced Performer Rating", "ignored"},
+	{"regex", `^.+ ★(?:: [0-5])?$`, "ignored"},
 	{"regex", `\b(?:blonde?|brunette|redhead|black hair|brown hair|dyed hair)\b`, "performer_attribute"},
 	{"regex", `\b(?:blue|brown|green|hazel|gr[ae]y) eyes?\b`, "performer_attribute"},
 	{"regex", `\b(?:caucasian|asian|latina?|ebony)\b|\b(?:black|white|pale|medium|dark) skin\b`, "performer_attribute"},
@@ -329,13 +332,15 @@ var compiledTagRules = func() []struct {
 
 // resolveTagRole mirrors TagRoleResolver.resolve.
 func resolveTagRole(tagID, name string, taxonomy taxonomyMatch) tagRoleResult {
-	folded := strings.ToLower(strings.TrimSpace(name))
+	name = strings.TrimSpace(name)
+	folded := strings.ToLower(name)
 	for _, rule := range compiledTagRules {
-		if rule.match == "regex" {
+		if rule.match == "regex" && rule.role != "ignored" {
 			continue
 		}
 		applies := (rule.match == "exact" && folded == strings.ToLower(rule.pattern)) ||
-			(rule.match == "prefix" && strings.HasPrefix(folded, strings.ToLower(rule.pattern)))
+			(rule.match == "prefix" && strings.HasPrefix(folded, strings.ToLower(rule.pattern))) ||
+			(rule.compiled != nil && rule.compiled.MatchString(name))
 		if applies {
 			return tagRoleResult{rule.role, "configured_" + rule.match + "_rule:" + rule.pattern, taxonomy}
 		}
@@ -349,14 +354,14 @@ func resolveTagRole(tagID, name string, taxonomy taxonomyMatch) tagRoleResult {
 			fmt.Sprintf("stashdb_%s:%s", taxonomy.method, categoryID), taxonomy}
 	}
 	for _, rule := range compiledTagRules {
-		if rule.match != "regex" || rule.compiled == nil {
+		if rule.match != "regex" || rule.role == "ignored" || rule.compiled == nil {
 			continue
 		}
-		if rule.compiled.MatchString(strings.TrimSpace(name)) {
+		if rule.compiled.MatchString(name) {
 			return tagRoleResult{rule.role, "configured_regex_rule:" + rule.pattern, taxonomy}
 		}
 	}
-	if strings.HasPrefix(strings.TrimSpace(name), "[") && strings.HasSuffix(strings.TrimSpace(name), "]") {
+	if strings.HasPrefix(name, "[") && strings.HasSuffix(name, "]") {
 		return tagRoleResult{"workflow_administrative", "bracketed_automation_default", taxonomy}
 	}
 	return tagRoleResult{"content", "content_default", taxonomy}
@@ -823,7 +828,7 @@ ORDER BY scene_id, tag_id`)
 }
 
 // performerFeatures mirrors FeatureBuilder._performer_features.
-func performerFeatures(db dbx, sceneFeatures []featureRow, progress func(fraction float64)) ([]featureRow, error) {
+func performerFeatures(db dbx, sceneFeatures []featureRow, roles map[string]tagRoleResult, progress func(fraction float64)) ([]featureRow, error) {
 	contentByScene := map[string][]featureRow{}
 	for _, feature := range sceneFeatures {
 		if feature.entityType == "scene" && feature.family == "content" {
@@ -907,12 +912,19 @@ ORDER BY sp.performer_id, s.scene_id`)
 		return nil, err
 	}
 	fallbackAugmented := map[string]bool{}
+	var ignoredIDs []string
+	for id, result := range roles {
+		if result.role == "ignored" {
+			ignoredIDs = append(ignoredIDs, id)
+		}
+	}
 	rows, err = db.Query(`
 SELECT sp.performer_id, count(DISTINCT sp.scene_id) AS support
 FROM scene_performer sp JOIN scene_tag st ON st.scene_id=sp.scene_id
 JOIN source_tag t ON t.tag_id=st.tag_id
-WHERE lower(t.name) LIKE '%augmentation%' OR lower(t.name) LIKE '%fake tits%'
-GROUP BY sp.performer_id HAVING count(DISTINCT sp.scene_id) >= 2`)
+WHERE (lower(t.name) LIKE '%augmentation%' OR lower(t.name) LIKE '%fake tits%')
+AND st.tag_id NOT IN (SELECT value FROM json_each(?))
+GROUP BY sp.performer_id HAVING count(DISTINCT sp.scene_id) >= 2`, jsonIDs(ignoredIDs))
 	if err != nil {
 		return nil, err
 	}
@@ -1236,7 +1248,7 @@ ON CONFLICT(feature_version) DO UPDATE SET status='building', error=NULL`,
 		}
 		if err := rec.stage("", "feature.performer_features", func() error {
 			var err error
-			performerRows, err = performerFeatures(db, sceneRows, progress)
+			performerRows, err = performerFeatures(db, sceneRows, roles, progress)
 			return err
 		}); err != nil {
 			return err

@@ -82,12 +82,14 @@ def atomic_write(path: Path, content: bytes) -> None:
         staged.unlink(missing_ok=True)
 
 
-def install(directory: Path, adapter: bytes) -> Path | None:
+def install(
+    directory: Path, adapter: bytes, *, expected_sha256: str | None = ADAPTER_SHA256
+) -> Path | None:
     directory = directory.resolve()
     manifest = directory / "stash-curator.yml"
     if not manifest.is_file() or not (directory / "stash-curator.js").is_file():
         raise ValueError("This is not an installed Curator folder; install Curator first")
-    if hashlib.sha256(adapter).hexdigest() != ADAPTER_SHA256:
+    if expected_sha256 is not None and hashlib.sha256(adapter).hexdigest() != expected_sha256:
         raise ValueError("Adapter checksum mismatch; no files changed")
     original = manifest.read_bytes()
     replacement = with_assets(original.decode("utf-8")).encode("utf-8")
@@ -114,13 +116,19 @@ def main() -> None:
     parser.add_argument(
         "plugin_dir", nargs="?", type=Path, help="Installed folder containing stash-curator.yml"
     )
+    parser.add_argument(
+        "--adapter-file", type=Path, help="Use a local adapter instead of downloading"
+    )
     args = parser.parse_args()
     try:
         directory = args.plugin_dir or find_plugin()
-        # Download and verify before changing any installed file.
-        with urllib.request.urlopen(ADAPTER_URL, timeout=60) as response:
-            adapter = response.read()
-        backup = install(directory, adapter)
+        if args.adapter_file is None:
+            # Download and verify before changing any installed file.
+            with urllib.request.urlopen(ADAPTER_URL, timeout=60) as response:
+                adapter = response.read()
+            backup = install(directory, adapter)
+        else:
+            backup = install(directory, args.adapter_file.read_bytes(), expected_sha256=None)
     except (OSError, ValueError) as error:
         parser.exit(1, f"Installation stopped: {error}\n")
     print("Stash UI adapter installed." if backup else "Stash UI adapter is already installed.")

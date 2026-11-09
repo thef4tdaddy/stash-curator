@@ -83,7 +83,7 @@ class TagRoleResolver:
         normalized = (name or "").strip()
         folded = normalized.casefold()
         for match, pattern, role, compiled in self.rules:
-            if match == "regex":
+            if match == "regex" and role is not TagRole.IGNORED:
                 continue
             applies = (
                 (match == "exact" and folded == pattern.casefold())
@@ -99,7 +99,7 @@ class TagRoleResolver:
                 taxonomy,
             )
         for match, pattern, role, compiled in self.rules:
-            if match != "regex":
+            if match != "regex" or role is TagRole.IGNORED:
                 continue
             if compiled is not None and compiled.search(normalized):
                 return TagRoleResult(role, f"configured_regex_rule:{pattern}", taxonomy)

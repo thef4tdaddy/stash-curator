@@ -678,6 +678,7 @@ class PreferenceModelBuilder:
 
     def _scene_labels(self) -> dict[str, _SceneLabel]:
         signals: dict[str, list[tuple[float, float, str]]] = defaultdict(list)
+        explicit_thumbs: set[str] = set()
         for row in self.connection.execute(
             """
             SELECT scene_id, event_type, outcome, confidence, payload_json FROM behavior_event
@@ -699,7 +700,9 @@ class PreferenceModelBuilder:
             ORDER BY scene_id, occurred_at_ms
             """
         ):
-            signals[str(row["scene_id"])].append(
+            scene_id = str(row["scene_id"])
+            explicit_thumbs.add(scene_id)
+            signals[scene_id].append(
                 (
                     DEFAULT_CALIBRATION.thumb_up_value
                     if row["feedback_type"] == "thumb_up"
@@ -729,13 +732,47 @@ class PreferenceModelBuilder:
                     "curation_rating",
                 )
             )
+        # Count each Stash UI criterion once and skip conflicting scores.
         for row in self.connection.execute(
-            "SELECT scene_id, rating100 FROM source_scene WHERE rating100 IS NOT NULL"
-        ):
-            value = _clamp((float(row["rating100"]) - 50) / 50)
-            signals[str(row["scene_id"])].append(
-                (value, self.config.model.scene_rating_confidence, "scene_rating")
+            """
+            WITH criteria AS (
+                SELECT st.scene_id, CAST(substr(min(t.name), -1) AS INTEGER) AS score
+                FROM scene_tag st JOIN source_tag t ON t.tag_id=st.tag_id
+                WHERE st.provenance='scene' AND t.name GLOB '?* ★: [0-5]'
+                GROUP BY st.scene_id, substr(t.name, 1, length(t.name)-1)
+                HAVING min(t.name)=max(t.name)
+            ), advanced AS (
+                SELECT scene_id, avg(score) AS score FROM criteria GROUP BY scene_id
             )
+            SELECT s.scene_id, s.rating100, a.score AS advanced_score
+            FROM source_scene s LEFT JOIN advanced a ON a.scene_id=s.scene_id
+            WHERE s.rating100 IS NOT NULL OR a.score IS NOT NULL
+            """
+        ):
+            scene_id = str(row["scene_id"])
+            if scene_id in explicit_thumbs:
+                continue
+            advanced_score = row["advanced_score"]
+            detail = 0.0
+            if advanced_score is not None:
+                detail = (advanced_score - 3) / (2 if advanced_score > 3 else 3)
+            if row["rating100"] is None:
+                if detail:
+                    signals[scene_id].append((detail, 0.35, "advanced_scene_rating"))
+                continue
+            rating100 = float(row["rating100"])
+            value = _clamp((rating100 - 50) / 50)
+            confidence = self.config.model.scene_rating_confidence
+            if rating100 >= 80 or 0 < rating100 <= 20:
+                value = (
+                    DEFAULT_CALIBRATION.thumb_up_value
+                    if rating100 >= 80
+                    else DEFAULT_CALIBRATION.thumb_down_value
+                )
+                confidence = DEFAULT_CALIBRATION.explicit_feedback_confidence
+            # Adjust the existing signal without adding another vote or confidence.
+            value = _clamp(value + 0.15 * detail)
+            signals[scene_id].append((value, confidence, "scene_rating"))
         for row in self.connection.execute(
             """SELECT scene_id, value FROM feedback
                WHERE reversed_by_id IS NULL AND feedback_type='impact_correction'

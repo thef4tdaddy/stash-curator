@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -43,20 +43,59 @@ jobs:
           import hashlib, os, pathlib, zipfile
           root = pathlib.Path('dist/dev')
           base = 'https://github.com/' + os.environ['REPOSITORY'] + '/releases/download/stashui-preview/'
+          build_id = os.environ['GITHUB_RUN_ID'] + '-' + os.environ['GITHUB_RUN_ATTEMPT']
           for index in root.glob('index*.yml'):
               text = index.read_text()
               archive = next(line.split(': ', 1)[1] for line in text.splitlines() if line.startswith('  path: '))
               digest = next(line.split(': ', 1)[1] for line in text.splitlines() if line.startswith('  sha256: '))
-              assert hashlib.sha256((root / archive).read_bytes()).hexdigest() == digest
-              with zipfile.ZipFile(root / archive) as package:
+              archive_path = root / archive
+              assert hashlib.sha256(archive_path.read_bytes()).hexdigest() == digest
+              with zipfile.ZipFile(archive_path) as package:
                   assert package.testzip() is None
                   assert 'assets/stashui.js' in package.namelist()
                   assert 'stash-curator.yml' in package.namelist()
-              index.write_text(text.replace('  path: ' + archive, '  path: ' + base + archive))
+              asset = f'{archive_path.stem}-{build_id}.zip'
+              archive_path.rename(root / asset)
+              index.write_text(text.replace('  path: ' + archive, '  path: ' + base + asset))
           PY
       - uses: actions/upload-artifact@v7
         with:
           name: stashui-preview-package
+          if-no-files-found: error
           path: |
             dist/dev/stash-curator*.zip
             dist/dev/index*.yml
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'thef4tdaddy/stash-curator'
+    needs: build
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: stashui-preview-package
+          path: preview
+      - name: Update the Stash plugin source
+        working-directory: preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          release=stashui-preview
+          existing=$(gh release view "$release" --json assets --jq '.assets[].name')
+          previous=$(mktemp -d)
+          trap 'rm -rf "$previous"' EXIT
+          # Keep archives at unique URLs so older indexes still work during publication.
+          for archive in stash-curator*.zip; do
+            if grep -Fxq -- "$archive" <<< "$existing"; then
+              gh release download "$release" --pattern "$archive" --dir "$previous"
+              cmp "$archive" "$previous/$archive"
+            else
+              gh release upload "$release" "$archive"
+            fi
+          done
+          gh release upload "$release" index*.yml --clobber

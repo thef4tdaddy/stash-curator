@@ -21,6 +21,9 @@ class FeatureConfig:
         TagRule("prefix", "[Workflow:", "workflow_administrative"),
         TagRule("prefix", "[Technical:", "quality_technical"),
         TagRule("exact", "[Curator: Ignore]", "ignored"),
+        TagRule("exact", "Advanced Rating System", "ignored"),
+        TagRule("exact", "Advanced Performer Rating", "ignored"),
+        TagRule("regex", r"^.+ ★(?:: [0-5])?$", "ignored"),
         TagRule(
             "regex",
             r"\b(?:blonde?|brunette|redhead|black hair|brown hair|dyed hair)\b",

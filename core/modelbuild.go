@@ -124,12 +124,20 @@ const sceneOnlySignal = "scene_reason_scene"
 // _training_overrides: for scenes with a "Just this scene" signal, the label
 // without it (absent when nothing else is left).
 func modelSceneLabels(db dbx) (map[string]sceneLabel, map[string]*sceneLabel, error) {
+	const (
+		thumbUpValue             = 0.90
+		thumbDownValue           = -1.0
+		thumbConfidence          = 1.0
+		advancedRatingNudge      = 0.15
+		advancedRatingConfidence = 0.35
+	)
 	type signal struct {
 		value      float64
 		confidence float64
 		signalType string
 	}
 	signals := map[string][]signal{}
+	explicitThumbs := map[string]bool{}
 	rows, err := db.Query(`
 SELECT scene_id, event_type, outcome, confidence, payload_json FROM behavior_event
 WHERE scene_id IS NOT NULL AND outcome IS NOT NULL ORDER BY scene_id, occurred_at_ms`)
@@ -169,11 +177,12 @@ ORDER BY scene_id, occurred_at_ms`)
 			rows.Close()
 			return nil, nil, err
 		}
-		value := -1.0
+		value := thumbDownValue
 		if feedbackType == "thumb_up" {
-			value = 0.90
+			value = thumbUpValue
 		}
-		signals[sceneID] = append(signals[sceneID], signal{value, 1.0, feedbackType})
+		explicitThumbs[sceneID] = true
+		signals[sceneID] = append(signals[sceneID], signal{value, thumbConfidence, feedbackType})
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -208,20 +217,60 @@ ORDER BY scene_id, occurred_at_ms`)
 	if err := rows.Err(); err != nil {
 		return nil, nil, err
 	}
-	rows, err = db.Query(`SELECT scene_id, rating100 FROM source_scene WHERE rating100 IS NOT NULL`)
+	// Stash UI attaches one "<criterion> ★: <0-5>" tag per scored criterion.
+	// Count a criterion once and skip it when multiple scores disagree.
+	rows, err = db.Query(`
+WITH criteria AS (
+    SELECT st.scene_id, CAST(substr(min(t.name), -1) AS INTEGER) AS score
+    FROM scene_tag st JOIN source_tag t ON t.tag_id=st.tag_id
+    WHERE st.provenance='scene' AND t.name GLOB '?* ★: [0-5]'
+    GROUP BY st.scene_id, substr(t.name, 1, length(t.name)-1)
+    HAVING min(t.name)=max(t.name)
+), advanced AS (
+    SELECT scene_id, avg(score) AS score FROM criteria GROUP BY scene_id
+)
+SELECT s.scene_id, s.rating100, a.score
+FROM source_scene s LEFT JOIN advanced a ON a.scene_id=s.scene_id
+WHERE s.rating100 IS NOT NULL OR a.score IS NOT NULL`)
 	if err != nil {
 		return nil, nil, err
 	}
 	for rows.Next() {
 		var sceneID string
-		var rating100 int64
-		if err := rows.Scan(&sceneID, &rating100); err != nil {
+		var rating100 sql.NullInt64
+		var advancedScore sql.NullFloat64
+		if err := rows.Scan(&sceneID, &rating100, &advancedScore); err != nil {
 			rows.Close()
 			return nil, nil, err
 		}
-		signals[sceneID] = append(signals[sceneID], signal{
-			clamp((float64(rating100) - 50) / 50), 0.90, "scene_rating",
-		})
+		// A manual thumb and a Stash rating both express the same preference.
+		if explicitThumbs[sceneID] {
+			continue
+		}
+		detail := 0.0
+		if advancedScore.Valid {
+			detail = (advancedScore.Float64 - 3) / 3
+			if advancedScore.Float64 > 3 {
+				detail = (advancedScore.Float64 - 3) / 2
+			}
+		}
+		if !rating100.Valid {
+			if detail != 0 {
+				signals[sceneID] = append(signals[sceneID], signal{detail, advancedRatingConfidence, "advanced_scene_rating"})
+			}
+			continue
+		}
+		rating := rating100.Int64
+		value, confidence := clamp((float64(rating)-50)/50), 0.90
+		if high, low := rating >= 80, rating > 0 && rating <= 20; high || low {
+			value, confidence = thumbDownValue, thumbConfidence
+			if high {
+				value = thumbUpValue
+			}
+		}
+		// Adjust the existing signal without adding another vote or confidence.
+		value = clamp(value + advancedRatingNudge*detail)
+		signals[sceneID] = append(signals[sceneID], signal{value, confidence, "scene_rating"})
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {

@@ -150,6 +150,90 @@ function contextActions(stashui, type) {
   };
 }
 
+function homeRecommendations(stashui) {
+  return async (el, { signal }) => {
+    const section = el.closest('section[data-xslot="home.section"]');
+    if (signal?.aborted) return;
+    try {
+      const { runPluginOperation: slate } = await stashui.gql(
+        'mutation CuratorHome($args: Map!) { runPluginOperation(plugin_id: "stash-curator", args: $args) }',
+        { args: { operation: "get_slate", lane: "for_you", count: 12, context: { route: "stashui-home" } } },
+        { signal },
+      );
+      if (signal?.aborted) return;
+      const ids = [...new Set((slate?.items || []).map((item) => Number(item.scene_id)))].filter(
+        (id) => Number.isSafeInteger(id) && id > 0 && id <= 2147483647,
+      );
+      if (!ids.length) {
+        if (section) section.hidden = true;
+        return;
+      }
+      // Query by filter so Stash UI can apply its hidden-folder rules. Stash's
+      // direct scene_ids lookup bypasses scene_filter entirely.
+      const filter = ids.reduceRight((rest, id) => ({
+        id: { value: id, modifier: "EQUALS" }, ...(rest && { OR: rest }),
+      }), null);
+      const { findScenes } = await stashui.gql(
+        `query CuratorHomeScenes($filter: SceneFilterType!) {
+          findScenes(scene_filter: $filter, filter: { per_page: 12 }) {
+            scenes { id title paths { screenshot } }
+          }
+        }`, { filter }, { signal },
+      );
+      if (signal?.aborted) return;
+      const scenes = new Map(findScenes.scenes.map((scene) => [Number(scene.id), scene]));
+      const picks = ids.flatMap((id) => {
+        const scene = scenes.get(id);
+        return scene ? [{ id: String(id), title: scene.title || `Scene ${id}`, thumb: scene.paths?.screenshot }] : [];
+      });
+      if (!picks.length) {
+        if (section) section.hidden = true;
+        return;
+      }
+
+      const grid = document.createElement("div");
+      grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,160px),1fr));gap:.5rem;margin-bottom:.5rem";
+      picks.forEach((pick, index) => {
+        const card = document.createElement("a");
+        card.href = `#/scene/${pick.id}`;
+        card.className = "kb-piece";
+        card.style.aspectRatio = "16 / 9";
+        if (pick.thumb) {
+          const image = document.createElement("img");
+          image.alt = "";
+          image.loading = "lazy";
+          image.addEventListener("load", () => image.classList.add("is-loaded"), { once: true });
+          image.src = pick.thumb;
+          card.appendChild(image);
+        }
+        const caption = document.createElement("span");
+        caption.className = "kb-placard";
+        const title = document.createElement("b");
+        title.textContent = pick.title;
+        caption.appendChild(title);
+        card.appendChild(caption);
+        if (stashui.has("play")) {
+          card.addEventListener("click", (event) => {
+            if (event.button > 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+            if (stashui.play(picks, index)) event.preventDefault();
+          });
+        }
+        grid.appendChild(card);
+      });
+      const more = document.createElement("a");
+      more.className = "kb-btn";
+      more.href = extensionHref({ view: "for_you" });
+      more.textContent = stashui.t("View all in Curator");
+      const hide = document.createElement("style");
+      // Keep the stock sections intact so the slot's removal restores them.
+      hide.textContent = '[data-sections] > section:is([data-home="foryou"], [data-home="rewatch"]) { display: none; }';
+      el.append(grid, more, hide);
+    } catch (_) {
+      if (!signal?.aborted && section) section.hidden = true;
+    }
+  };
+}
+
 export default function setup(stashui) {
   if (!stashui || typeof stashui.has !== "function" || !stashui.has("route")) return;
   stashui.addRoute({ path: "", title: "Stash Curator", render: renderCurator });
@@ -176,6 +260,13 @@ export default function setup(stashui) {
       id: "curator-performer",
       title: "Stash Curator",
       mount: contextActions(stashui, "performer"),
+    });
+  }
+  if (stashui.has("slot:home.section") && stashui.has("gql")) {
+    stashui.addSlot("home.section", {
+      id: "curator-for-you",
+      title: stashui.t("Curator For You"),
+      mount: homeRecommendations(stashui),
     });
   }
 }

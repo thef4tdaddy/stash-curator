@@ -19,6 +19,21 @@ Tags, performers, and studios connect those signals to other
 scenes. Better metadata and a few deliberate answers give it more useful evidence;
 you do not need to rate the whole library.
 
+A Stash scene rating of 4 stars or higher teaches Curator like a thumbs up.
+A half-star or one-star rating teaches it like a thumbs down. Ratings in between
+retain their usual scoring. If a scene also has an active explicit thumb, Curator
+uses that instead of the star rating. Rating-based feedback affects recommendations
+and leaves the Prune queue alone.
+
+Curator reads Stash UI's Advanced Rating scene tags as criterion scores. Scores
+above 3 raise the rating signal and scores below 3 lower it, with a cap of 0.15
+on the adjustment. Each criterion counts once, and conflicting scores for a
+criterion are skipped. Curator uses the saved overall rating as the main signal,
+which already reflects Stash UI's configured weights. Without an overall rating,
+criterion scores provide one lower-confidence signal. An active explicit thumb
+takes precedence over both. The generated rating tags stay out of content and
+performer similarity features.
+
 Tag ratings express a preference for that feature. **Strong dislike** lowers preference;
 **Never** is a hard exclusion for matching content. **Clear answer** removes the
 direct preference or block. These are separate from **Never show**, which suppresses

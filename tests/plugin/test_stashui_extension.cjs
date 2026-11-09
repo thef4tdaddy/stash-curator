@@ -8,7 +8,7 @@ const root = path.join(__dirname, "../..");
 const source = fs.readFileSync(path.join(root, "plugin/assets/stashui.js"), "utf8");
 function element(tag) {
   return {
-    tag, children: [], attributes: {}, style: {}, listeners: new Map(),
+    tag, children: [], attributes: {}, style: {}, listeners: new Map(), classList: new Set(),
     setAttribute(key, value) { this.attributes[key] = value; },
     hasAttribute(key) { return key in this.attributes; },
     addEventListener(event, callback) { this.listeners.set(event, callback); },
@@ -17,6 +17,8 @@ function element(tag) {
     },
     getBoundingClientRect() { return { top: 180 }; },
     appendChild(child) { this.children.push(child); child.parent = this; },
+    append(...children) { children.forEach((child) => this.appendChild(child)); },
+    closest(selector) { return selector === 'section[data-xslot="home.section"]' ? this.parent : null; },
     remove() {
       if (this.parent) this.parent.children = this.parent.children.filter((child) => child !== this);
       this.parent = null;
@@ -108,6 +110,72 @@ function destination(link) {
   setup(partial);
   assert.equal(partial.nav.length, 0);
   assert.deepEqual(partial.slots.map((slot) => slot.name), ["scene.info"]);
+
+  const homeApi = host(["route", "slot:home.section", "gql", "play"]);
+  setup(homeApi);
+  const [homeSlot] = homeApi.slots;
+  assert.equal(homeSlot.name, "home.section");
+  const recommendationSection = element("section");
+  const body = element("div");
+  recommendationSection.appendChild(body);
+  const homeController = new AbortController();
+  homeApi.gql = async (query, variables, options) => {
+    assert.equal(options.signal, homeController.signal);
+    if (query.includes("runPluginOperation")) {
+      assert.equal(variables.args.operation, "get_slate");
+      assert.equal(variables.args.lane, "for_you");
+      return { runPluginOperation: { items: ["9", "3", "5", "9"].map((scene_id) => ({ scene_id })) } };
+    }
+    assert.match(query, /\$filter: SceneFilterType!/);
+    assert.doesNotMatch(query, /scene_ids/);
+    assert.equal(variables.filter.id.value, 9);
+    assert.equal(variables.filter.OR.id.value, 3);
+    assert.equal(variables.filter.OR.OR.id.value, 5);
+    return { findScenes: { scenes: [
+      { id: "5", title: "Five" }, { id: "9", title: "Nine", paths: { screenshot: "/scene/9/screenshot" } },
+    ] } };
+  };
+  homeApi.play = (picks, index) => {
+    assert.deepEqual(picks.map(({ id }) => id), ["9", "5"]);
+    assert.equal(index, 1);
+    return {};
+  };
+  await homeSlot.mount(body, { signal: homeController.signal });
+  const [grid, more, hide] = body.children;
+  assert.deepEqual(grid.children.map((card) => card.href), ["#/scene/9", "#/scene/5"]);
+  const [thumbnail] = grid.children[0].children;
+  assert.equal(thumbnail.src, "/scene/9/screenshot");
+  thumbnail.listeners.get("load")();
+  assert.equal(thumbnail.classList.has("is-loaded"), true);
+  assert.equal(destination(more).get("view"), "for_you");
+  assert.equal(hide.tag, "style");
+  assert.deepEqual([...hide.textContent.matchAll(/data-home="(\w+)"/g)].map((match) => match[1]), ["foryou", "rewatch"]);
+  let prevented = false;
+  grid.children[1].listeners.get("click")({ button: 0, preventDefault: () => { prevented = true; } });
+  assert.equal(prevented, true);
+
+  for (const gql of [
+    async () => ({ runPluginOperation: { items: [] } }),
+    async () => { throw new Error("Curator unavailable"); },
+    async (query) => query.includes("runPluginOperation")
+      ? { runPluginOperation: { items: [{ scene_id: "9" }] } } : { findScenes: { scenes: [] } },
+  ]) {
+    const section = element("section");
+    const fallback = element("div");
+    section.appendChild(fallback);
+    homeApi.gql = gql;
+    await homeSlot.mount(fallback, {});
+    assert.equal(section.hidden, true);
+    assert.deepEqual(fallback.children, []);
+  }
+  const leftHome = new AbortController();
+  const staleBody = element("div");
+  homeApi.gql = async () => {
+    leftHome.abort();
+    return { runPluginOperation: { items: [{ scene_id: "9" }] } };
+  };
+  await homeSlot.mount(staleBody, { signal: leftHome.signal });
+  assert.deepEqual(staleBody.children, []);
 
   // The full app gets a dedicated frame, not a link to the Classic workshop.
   // Exercise loading, retry, responsive sizing, local navigation and disposal.

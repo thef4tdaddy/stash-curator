@@ -349,6 +349,46 @@ def test_feature_build_ignored_tags_parity(binary: Path, tmp_path: Path) -> None
             connection.close()
 
 
+def test_feature_build_ignores_advanced_rating_tags(binary: Path, tmp_path: Path) -> None:
+    tags = {
+        "advanced-scene": "Advanced Rating System",
+        "advanced-performer": "Advanced Performer Rating",
+        "criterion": "Chemistry ★",
+        "score": "Augmentation ★: 5",
+        "ordinary": "Chemistry",
+    }
+    results = []
+    for label, build in (
+        ("python", _run_python_build),
+        ("go", lambda db: _run_go_build(binary, db)),
+    ):
+        db = tmp_path / label / "curator.sqlite3"
+        db.parent.mkdir()
+        make_feature_sidecar(db)
+        with sqlite3.connect(db) as connection:
+            connection.executemany(
+                "INSERT INTO source_tag(tag_id, name, source_hash) VALUES (?, ?, ?)",
+                [(tag_id, name, tag_id) for tag_id, name in tags.items()],
+            )
+            connection.executemany(
+                "INSERT INTO scene_tag(scene_id, tag_id, provenance) VALUES (?, ?, 'scene')",
+                [(scene, tag_id) for scene in ("old-good", "recent-good") for tag_id in tags],
+            )
+        results.append(build(db))
+        with sqlite3.connect(db) as connection:
+            roles = dict(connection.execute("SELECT tag_id, role FROM tag_role"))
+            assert {tag_id: roles[tag_id] for tag_id in tags} == dict.fromkeys(tags, "ignored") | {
+                "ordinary": "content"
+            }
+        with sqlite3.connect(results[-1][1]) as artifact:
+            features = {name for (name,) in artifact.execute("SELECT name FROM feature_definition")}
+            assert features.intersection(f"tag:{tag_id}" for tag_id in tags) == {"tag:ordinary"}
+            for (profile,) in artifact.execute("SELECT profile_json FROM performer_profile"):
+                assert "repeated_scene_tags" not in profile
+    assert results[0][0] == results[1][0]
+    assert artifact_tolerant_diff(results[0][1], results[1][1]) == ""
+
+
 def test_feature_build_reuse_parity(binary: Path, tmp_path: Path) -> None:
     """A second build on the same sidecar reuses the published feature on
     both implementations (reuse_count bumps, no new artifact)."""

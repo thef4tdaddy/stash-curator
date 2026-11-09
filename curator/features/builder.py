@@ -187,7 +187,7 @@ class FeatureBuilder:
                 scene_features = self._scene_features(roles)
             self._report(0.45)
             with span("python", "feature.performer_features"):
-                performer_features = self._performer_features(scene_features)
+                performer_features = self._performer_features(scene_features, roles)
             self._report(0.60)
             if self._source_fingerprint() != source_fingerprint:
                 raise FeatureBuildError("source cache changed during feature construction")
@@ -465,7 +465,9 @@ class FeatureBuilder:
             )
         return tuple(features)
 
-    def _performer_features(self, scene_features: tuple[_Feature, ...]) -> tuple[_Feature, ...]:
+    def _performer_features(
+        self, scene_features: tuple[_Feature, ...], roles: dict[str, TagRoleResult]
+    ) -> tuple[_Feature, ...]:
         content_by_scene: dict[str, list[_Feature]] = defaultdict(list)
         for feature in scene_features:
             if feature.entity_type == "scene" and feature.family == "content":
@@ -521,9 +523,15 @@ class FeatureBuilder:
             SELECT sp.performer_id, count(DISTINCT sp.scene_id) AS support
             FROM scene_performer sp JOIN scene_tag st ON st.scene_id=sp.scene_id
             JOIN source_tag t ON t.tag_id=st.tag_id
-            WHERE lower(t.name) LIKE '%augmentation%' OR lower(t.name) LIKE '%fake tits%'
+            WHERE (lower(t.name) LIKE '%augmentation%' OR lower(t.name) LIKE '%fake tits%')
+            AND st.tag_id NOT IN (SELECT value FROM json_each(?))
             GROUP BY sp.performer_id HAVING count(DISTINCT sp.scene_id) >= 2
-            """
+            """,
+            (
+                json.dumps(
+                    [tag_id for tag_id, result in roles.items() if result.role is TagRole.IGNORED]
+                ),
+            ),
         )
         fallback_augmented.update(str(row["performer_id"]) for row in fallback_rows)
         performer_rows = self.connection.execute(

@@ -711,6 +711,93 @@ def test_model_build_artifact_parity(binary: Path, tmp_path: Path) -> None:
         go_conn.close()
 
 
+def test_scene_rating_thumb_thresholds(binary: Path, tmp_path: Path) -> None:
+    db = tmp_path / "curator.sqlite3"
+    make_feature_sidecar(db)
+    ratings = {
+        "half-star": (10, -1.0, 1.0),
+        "one-star": (20, -1.0, 1.0),
+        "above-one": (21, -0.58, 0.9),
+        "below-four": (79, 0.58, 0.9),
+        "four-stars": (80, 0.9, 1.0),
+        "five-stars": (100, 0.9, 1.0),
+        "matching-thumb": (80, 0.9, 1.0),
+        "conflicting-thumb": (80, -1.0, 1.0),
+        "middle-with-thumb": (60, -1.0, 1.0),
+        "advanced-high": (70, 0.55, 0.9),
+        "advanced-low": (70, 0.25, 0.9),
+        "advanced-neutral": (70, 0.4, 0.9),
+        "advanced-only": (None, 1.0, 0.35),
+    }
+    thumbs = {
+        "matching-thumb": "thumb_up",
+        "conflicting-thumb": "thumb_down",
+        "middle-with-thumb": "thumb_down",
+    }
+    connection = connect_database(db, attach_artifacts=False)
+    try:
+        connection.executemany(
+            "INSERT INTO source_scene(scene_id, source_hash, rating100) VALUES (?, ?, ?)",
+            [(scene, scene, rating) for scene, (rating, _, _) in ratings.items()],
+        )
+        connection.executemany(
+            "INSERT INTO feedback(feedback_id, scene_id, feedback_type, occurred_at_ms) "
+            "VALUES (?, ?, ?, 1)",
+            [(scene, scene, thumb) for scene, thumb in thumbs.items()],
+        )
+        connection.execute(
+            "INSERT INTO feedback(feedback_id, scene_id, feedback_type, occurred_at_ms) "
+            "VALUES ('undo', 'four-stars', 'reversal', 2)"
+        )
+        connection.execute(
+            "INSERT INTO feedback(feedback_id, scene_id, feedback_type, occurred_at_ms, "
+            "reversed_by_id) "
+            "VALUES ('undone-thumb', 'four-stars', 'thumb_down', 1, 'undo')"
+        )
+        score_tags = {
+            "high": "Chemistry ★: 5",
+            "high-copy": "Chemistry ★: 5",
+            "low": "Chemistry ★: 0",
+            "neutral": "Rewatch Value ★: 3",
+            "malformed": "Rewatch Value ★: 9",
+        }
+        connection.executemany(
+            "INSERT INTO source_tag(tag_id, name, source_hash) VALUES (?, ?, ?)",
+            [(tag_id, name, tag_id) for tag_id, name in score_tags.items()],
+        )
+        connection.executemany(
+            "INSERT INTO scene_tag(scene_id, tag_id, provenance) VALUES (?, ?, 'scene')",
+            [
+                ("advanced-high", "high"),
+                ("advanced-high", "high-copy"),
+                ("advanced-low", "low"),
+                ("advanced-neutral", "high"),
+                ("advanced-neutral", "low"),
+                ("advanced-neutral", "neutral"),
+                ("advanced-neutral", "malformed"),
+                ("advanced-only", "high"),
+                ("conflicting-thumb", "high"),
+            ],
+        )
+        connection.commit()
+        labels = PreferenceModelBuilder(connection)._scene_labels()
+        for scene, (rating, outcome, evidence) in ratings.items():
+            label = labels[scene]
+            assert label.outcome == pytest.approx(outcome), scene
+            assert label.effective_evidence == pytest.approx(evidence), scene
+            signal = "advanced_scene_rating" if rating is None else "scene_rating"
+            assert label.signal_types == (thumbs.get(scene, signal),)
+    finally:
+        connection.close()
+
+    go_db = tmp_path / "go.sqlite3"
+    go_db.write_bytes(db.read_bytes())
+    py_model, py_artifact = _run_python_build(db)
+    go_model, go_artifact = _run_go_build(binary, go_db)
+    assert go_model == py_model
+    assert artifact_tolerant_diff(go_artifact, py_artifact) == ""
+
+
 def test_model_build_reuse_parity(binary: Path, tmp_path: Path) -> None:
     """A second build on the same sidecar reuses the published model on both
     implementations (reuse_count bumps, no new artifact)."""

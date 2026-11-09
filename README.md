@@ -45,6 +45,12 @@ Curator your preferences. Feedback affects rankings after a model update.
 
 ### Stash UI integration
 
+To install the fork through Stash, use the [Stash UI preview plugin source](https://github.com/thef4tdaddy/stash-curator/releases/download/stashui-preview/index.yml)
+under **Settings → Plugins → Available Plugins**. When switching an existing
+installation, keep its **Local Path** so it uses the same data directory.
+To publish a new preview, run **StashUI preview package** from `main` in the
+fork's GitHub Actions. Stash can refresh the same source after the run succeeds.
+
 **Install this adapter into an existing Curator installation:** download
 [`scripts/install_stashui.py`](https://raw.githubusercontent.com/thef4tdaddy/stash-curator/main/scripts/install_stashui.py)
 and run it with Python, passing the installed Curator folder:
@@ -63,6 +69,9 @@ Stash UI, and open **Extensions → Stash Curator**. This is an adapter installe
 not a Stash plugin-manager source; upstream plugin updates may overwrite it, so
 rerun it after those updates. No Go compiler is needed.
 
+To try the adapter from this checkout with an existing Curator installation, run
+`python3 scripts/install_stashui.py --adapter-file plugin/assets/stashui.js "/path/to/stash/plugins/stash-curator"`.
+
 This fork includes an optional [Stash UI API v2](https://github.com/anonym88312/stash-pmv-plugins/tree/main/plugins/stashui#for-plugin-authors-extension-modules-api-v2)
 adapter. With Stash UI enabled, **Extensions → Stash Curator** opens a dedicated
 extension page containing Curator's complete interface. The scene player's info panel gets
@@ -79,12 +88,14 @@ keep their normal behavior. The player supports fullscreen and picture-in-pictur
 The extension hosts the existing React app in a same-origin iframe, with classic
 Stash's navbar hidden by Stash UI. Users do not need to open or switch to classic
 Stash. This is an embedded integration, not a rewrite of Curator's React interface.
-It does not add Curator homepage lanes or playback tracking to Stash UI's separate
-home/player pages. Classic Stash continues to work as before; Stash UI is optional
-and is not a required plugin dependency.
+Stash UI Home loads **Curator For You** as you scroll to the extension section.
+Once it has picks, it hides the built-in **For you** and **Long time no see** rows.
+Those rows remain available if Curator has no picks or the request fails. Continue
+watching, Favorites, Recently added and Shuffle stay available. The extension
+does not add Curator's playback tracking to the standalone Stash UI player.
 
 After updating the plugin, reload plugins and refresh Stash UI. Its Plugins page
-should show a **Stash UI extension** block for Curator with one route, one menu entry and two
+should show a **Stash UI extension** block for Curator with one route, one menu entry and three
 slots. Stash UI caches module discovery per plugin version; if testing an adapter
 added to an already-installed version, clear only its module-discovery cache in
 the browser console (`localStorage.removeItem("stashui.extMods1")`), then reload.
