@@ -199,6 +199,11 @@
   filter: brightness(1.08);
 }
 
+/* Stash UI's generic Classic embed keeps the fixed navigation menu. */
+html.kb-embed:has(.curator-page) .top-nav {
+  display: none !important;
+}
+
 .curator-page {
   background: var(--curator-bg);
   color: var(--curator-text);

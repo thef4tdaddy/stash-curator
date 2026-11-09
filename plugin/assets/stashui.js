@@ -74,7 +74,7 @@ function renderCurator(el, { query = {}, signal } = {}) {
       // Hide it in Curator's own frame, including when its router mounts it later.
       const embeddedStyle = doc.createElement("style");
       embeddedStyle.textContent = `
-        nav.top-nav { display: none !important; }
+        .top-nav { display: none !important; }
         body { padding-top: 0 !important; }
         .main { margin-top: 0 !important; }
       `;

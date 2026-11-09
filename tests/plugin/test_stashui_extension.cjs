@@ -208,7 +208,7 @@ function destination(link) {
   frame.listeners.get("load")();
   assert.equal(status.textContent, "");
   const [embeddedStyle] = frameDoc.head.children;
-  assert.match(embeddedStyle.textContent, /nav\.top-nav\s*\{\s*display:\s*none\s*!important/);
+  assert.match(embeddedStyle.textContent, /\.top-nav\s*\{\s*display:\s*none\s*!important/);
   assert.match(embeddedStyle.textContent, /body\s*\{\s*padding-top:\s*0/);
   const keepLocal = frameDoc.listeners.get("click");
   const anchor = Object.assign(element("a"), { href: "https://example.test/scenes/42" });
@@ -261,5 +261,7 @@ function destination(link) {
   const yaml = fs.readFileSync(path.join(root, "plugin/stash-curator.yml"), "utf8");
   assert.match(yaml, /assets:\s+\/: assets/);
   assert.doesNotMatch(yaml, /javascript:\s+- assets\/stashui.js/);
+  const css = fs.readFileSync(path.join(root, "plugin/stash-curator.css"), "utf8");
+  assert.match(css, /html\.kb-embed:has\(\.curator-page\) \.top-nav\s*\{\s*display:\s*none\s*!important/);
   console.log("Stash UI adapter: routes, full-app frame, context links, local navigation, media permissions, resizing, retry, cleanup, and fallback passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
