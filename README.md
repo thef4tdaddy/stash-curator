@@ -66,6 +66,14 @@ use. The package includes `config.example.toml` and preserves an existing
 `config.toml`; keep its `state/` directory across updates. Multi-file scenes stop
 for review. Curator itself is unchanged by installing this separate plugin.
 
+The source also offers **FileMonitor (Custom Host)** with targeted file scans and
+optional Identify after a successful scan. It runs on the NAS host, outside Docker.
+Installing/updating the menu package does not update a separate host service;
+use its backed-up host upgrade procedure and disable another scheduler's
+Identify-after-scan automation first. See the
+[custom FileMonitor instructions](https://github.com/thef4tdaddy/stash-filemonitor).
+Avoid loading both the community and custom FileMonitor plugin copies in Stash.
+
 **Install this adapter into an existing Curator installation:** download
 [`scripts/install_stashui.py`](https://raw.githubusercontent.com/thef4tdaddy/stash-curator/main/scripts/install_stashui.py)
 and run it with Python, passing the installed Curator folder:

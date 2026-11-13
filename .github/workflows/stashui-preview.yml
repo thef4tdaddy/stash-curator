@@ -32,7 +32,7 @@ jobs:
       - name: Verify StashUI extension
         run: |
           uv sync --locked
-          uv run pytest -q tests/plugin/test_stashui_extension.py tests/plugin/test_stashui_installer.py tests/test_build_plugin.py tests/test_whisparr_source.py
+          uv run pytest -q tests/plugin/test_stashui_extension.py tests/plugin/test_stashui_installer.py tests/test_build_plugin.py tests/test_whisparr_source.py tests/test_filemonitor_source.py
       - name: Build complete plugin package
         run: uv run python scripts/build_plugin.py --dev
       - name: Verify archives and prepare source URLs
@@ -67,6 +67,15 @@ jobs:
           persist-credentials: false
       - name: Add Whisparr Sync to the same source
         run: python scripts/add_whisparr_source.py --source companion-whisparr --output dist/dev --repository "${{ github.repository }}"
+      - name: Check out custom FileMonitor host package
+        uses: actions/checkout@v6
+        with:
+          repository: thef4tdaddy/stash-filemonitor
+          ref: ce0e41149c6c0475e5039f1650b217c26776c507
+          path: companion-filemonitor
+          persist-credentials: false
+      - name: Add FileMonitor to the same source
+        run: python scripts/add_filemonitor_source.py --source companion-filemonitor --output dist/dev --repository "${{ github.repository }}"
       - uses: actions/upload-artifact@v7
         with:
           name: stashui-preview-package
@@ -74,6 +83,7 @@ jobs:
           path: |
             dist/dev/stash-curator*.zip
             dist/dev/whisparr-sync*.zip
+            dist/dev/filemonitor*.zip
             dist/dev/index*.yml
 
   publish:

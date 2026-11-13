@@ -1,4 +1,4 @@
-name: Add Whisparr Sync to preview source
+name: Update custom plugins in preview source
 
 on:
   workflow_dispatch:
@@ -33,6 +33,14 @@ jobs:
         run: gh release download stashui-preview --pattern 'index*.yml' --dir preview
       - name: Package and extend all preview indexes
         run: python scripts/add_whisparr_source.py --source companion-whisparr --output preview --repository "${{ github.repository }}"
+      - uses: actions/checkout@v6
+        with:
+          repository: thef4tdaddy/stash-filemonitor
+          ref: ce0e41149c6c0475e5039f1650b217c26776c507
+          path: companion-filemonitor
+          persist-credentials: false
+      - name: Package custom FileMonitor host tools
+        run: python scripts/add_filemonitor_source.py --source companion-filemonitor --output preview --repository "${{ github.repository }}"
       - name: Publish archive before replacing indexes
         env:
           GH_TOKEN: ${{ github.token }}
@@ -40,12 +48,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          archive=$(find preview -maxdepth 1 -name 'whisparr-sync-*.zip' -printf '%f\n')
           existing=$(gh release view stashui-preview --json assets --jq '.assets[].name')
-          if grep -Fxq -- "$archive" <<< "$existing"; then
-            gh release download stashui-preview --pattern "$archive" --dir previous
-            cmp "preview/$archive" "previous/$archive"
-          else
-            gh release upload stashui-preview "preview/$archive"
-          fi
+          for file in preview/*.zip; do
+            archive=$(basename "$file")
+            if grep -Fxq -- "$archive" <<< "$existing"; then
+              gh release download stashui-preview --pattern "$archive" --dir previous
+              cmp "$file" "previous/$archive"
+            else
+              gh release upload stashui-preview "$file"
+            fi
+          done
           gh release upload stashui-preview preview/index*.yml --clobber
