@@ -54,6 +54,11 @@ fork's GitHub Actions. Stash can refresh the same source after the run succeeds.
 The same preview source also offers **Whisparr Sync** as a separate plugin. It
 imports identified local scenes into Whisparr and lets Whisparr move and rename
 them; existing Whisparr notifications handle Stash path updates. It requires
+Whisparr's Stash notification connection to be configured for import and rename
+updates and aimed at the intended Stash instance. Whisparr Sync adds no separate
+callback or Stash scan. Full instructions are in the
+[Whisparr Sync README](https://github.com/thef4tdaddy/whisparr-sync#install).
+It also requires
 Python 3.11+ on Linux/macOS and the packages in its `requirements.txt` inside
 Stash's Python environment. Enable its Move Files and Whisparr Rename settings,
 configure the URL/key and container path mappings, and test one scene before bulk

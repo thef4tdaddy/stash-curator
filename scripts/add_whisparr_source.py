@@ -8,9 +8,9 @@ import re
 import zipfile
 from pathlib import Path
 
-REVISION = "a4e8bb9c55bbca6e83368f1490bd202b6e16d1b9"
+REVISION = "542d0c361eb0c34dec0ae94406c8138bf523e600"
 VERSION = "1.1-" + REVISION[:7]
-DATE = "2026-11-13 14:14:02"
+DATE = "2026-11-13 14:22:39"
 FILES = ("whisparr-sync.py", "whisparr-sync.yml", "config.py", "requirements.txt")
 
 
