@@ -51,6 +51,16 @@ installation, keep its **Local Path** so it uses the same data directory.
 To publish a new preview, run **StashUI preview package** from `main` in the
 fork's GitHub Actions. Stash can refresh the same source after the run succeeds.
 
+The same preview source also offers **Whisparr Sync** as a separate plugin. It
+imports identified local scenes into Whisparr and lets Whisparr move and rename
+them; existing Whisparr notifications handle Stash path updates. It requires
+Python 3.11+ on Linux/macOS and the packages in its `requirements.txt` inside
+Stash's Python environment. Enable its Move Files and Whisparr Rename settings,
+configure the URL/key and container path mappings, and test one scene before bulk
+use. The package includes `config.example.toml` and preserves an existing
+`config.toml`; keep its `state/` directory across updates. Multi-file scenes stop
+for review. Curator itself is unchanged by installing this separate plugin.
+
 **Install this adapter into an existing Curator installation:** download
 [`scripts/install_stashui.py`](https://raw.githubusercontent.com/thef4tdaddy/stash-curator/main/scripts/install_stashui.py)
 and run it with Python, passing the installed Curator folder:

@@ -1,0 +1,51 @@
+name: Add Whisparr Sync to preview source
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize with full Curator preview publication to avoid replacing its indexes.
+concurrency:
+  group: stashui-preview
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && github.repository == 'thef4tdaddy/stash-curator'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: thef4tdaddy/whisparr-sync
+          ref: f8ebaf7e3c975babf20dbf83e989b8f94e7cb1d1
+          path: companion-whisparr
+          persist-credentials: false
+      - name: Download existing indexes without rebuilding Curator
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release download stashui-preview --pattern 'index*.yml' --dir preview
+      - name: Package and extend all preview indexes
+        run: python scripts/add_whisparr_source.py --source companion-whisparr --output preview --repository "${{ github.repository }}"
+      - name: Publish archive before replacing indexes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive=$(find preview -maxdepth 1 -name 'whisparr-sync-*.zip' -printf '%f\n')
+          existing=$(gh release view stashui-preview --json assets --jq '.assets[].name')
+          if grep -Fxq -- "$archive" <<< "$existing"; then
+            gh release download stashui-preview --pattern "$archive" --dir previous
+            cmp "preview/$archive" "previous/$archive"
+          else
+            gh release upload stashui-preview "preview/$archive"
+          fi
+          gh release upload stashui-preview preview/index*.yml --clobber

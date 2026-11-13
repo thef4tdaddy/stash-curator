@@ -32,7 +32,7 @@ jobs:
       - name: Verify StashUI extension
         run: |
           uv sync --locked
-          uv run pytest -q tests/plugin/test_stashui_extension.py tests/plugin/test_stashui_installer.py tests/test_build_plugin.py
+          uv run pytest -q tests/plugin/test_stashui_extension.py tests/plugin/test_stashui_installer.py tests/test_build_plugin.py tests/test_whisparr_source.py
       - name: Build complete plugin package
         run: uv run python scripts/build_plugin.py --dev
       - name: Verify archives and prepare source URLs
@@ -58,12 +58,22 @@ jobs:
               archive_path.rename(root / asset)
               index.write_text(text.replace('  path: ' + archive, '  path: ' + base + asset))
           PY
+      - name: Check out pinned Whisparr Sync package
+        uses: actions/checkout@v6
+        with:
+          repository: thef4tdaddy/whisparr-sync
+          ref: f8ebaf7e3c975babf20dbf83e989b8f94e7cb1d1
+          path: companion-whisparr
+          persist-credentials: false
+      - name: Add Whisparr Sync to the same source
+        run: python scripts/add_whisparr_source.py --source companion-whisparr --output dist/dev --repository "${{ github.repository }}"
       - uses: actions/upload-artifact@v7
         with:
           name: stashui-preview-package
           if-no-files-found: error
           path: |
             dist/dev/stash-curator*.zip
+            dist/dev/whisparr-sync*.zip
             dist/dev/index*.yml
 
   publish:
@@ -90,7 +100,7 @@ jobs:
           previous=$(mktemp -d)
           trap 'rm -rf "$previous"' EXIT
           # Keep archives at unique URLs so older indexes still work during publication.
-          for archive in stash-curator*.zip; do
+          for archive in *.zip; do
             if grep -Fxq -- "$archive" <<< "$existing"; then
               gh release download "$release" --pattern "$archive" --dir "$previous"
               cmp "$archive" "$previous/$archive"
