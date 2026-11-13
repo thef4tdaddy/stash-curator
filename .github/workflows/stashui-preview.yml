@@ -62,7 +62,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: thef4tdaddy/whisparr-sync
-          ref: 1b7c438c3f8356b763caa2e4bdc6c4af558dfba3
+          ref: 9be2c4024821d5b94dfb2df281bf3ce3c32fb103
           path: companion-whisparr
           persist-credentials: false
       - name: Add Whisparr Sync to the same source
