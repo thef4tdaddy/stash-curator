@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: thef4tdaddy/whisparr-sync
-          ref: 542d0c361eb0c34dec0ae94406c8138bf523e600
+          ref: 459563a93e90e981223fc229108b02aab11d47b4
           path: companion-whisparr
           persist-credentials: false
       - name: Download existing indexes without rebuilding Curator
